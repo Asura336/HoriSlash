@@ -1,0 +1,121 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// 可被外界调用的接口项:
+///     <see cref="SetInstance"/>: 函数, 设置新的怪物并指定位置, 活动状态, 颜色, 速度. 
+/// </summary>
+public class MonsterFactory : MonoBehaviour
+{
+    public static MonsterFactory Instance { get; private set; } = null;
+
+    public GameObject prefab;
+
+    public int initLen = 8;
+    public float developMultiplier = 1.5f;
+    public int waterLine = 4;
+    public int ActiveCount { get; private set; }
+
+    public Vector3 savePos = new Vector3(0, -10, 0);
+
+    Character player;
+
+    private Queue<GameObject> activeObjs = null;
+    private List<GameObject> _objs = null;
+
+    private void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else
+        {
+            DestroyImmediate(this);
+            return;
+        }
+
+        if (activeObjs == null)
+        {
+            activeObjs = new Queue<GameObject>();
+        }
+        if (_objs == null)
+        {
+            _objs = new List<GameObject>();
+        }
+    }
+
+    // Use this for initialization
+    void Start()
+    {
+        IncreaseObjs(initLen);
+        player = FindObjectOfType<Character>();
+    }
+
+    void OnCellBirth(GameObject obj = null)
+    {
+        ActiveCount++;
+    }
+
+    void OnCellDead(GameObject obj = null)
+    {
+        ActiveCount--;
+    }
+
+    #region 对象池部分
+
+    // 扩增对象池
+    void IncreaseObjs(int newLen)
+    {
+        int deltaLen = newLen - _objs.Count;
+        for (int i = 0; i < deltaLen; i++)
+        {
+            var cell = Instantiate(prefab, savePos, Quaternion.identity, null);
+            _objs.Add(cell);
+            DeleteCell(cell);
+        }
+    }
+
+    bool NeedIncrease()
+    {
+        return activeObjs.Count < waterLine;
+    }
+
+    // 从队列拿出新成员
+    public GameObject BirthCell(Vector3 pos)
+    {
+        if (NeedIncrease())
+        {
+            IncreaseObjs(Mathf.FloorToInt(_objs.Count * developMultiplier));
+        }
+        GameObject reverse = activeObjs.Dequeue();
+        reverse.transform.position = pos;
+        var monster = reverse.GetComponent<Monster>();
+        monster.WakeUp();
+        OnCellBirth(reverse);
+        return reverse;
+    }
+    
+    // 将销毁成员退给队列
+    public void DeleteCell(GameObject obj)
+    {
+        obj.transform.position = savePos;
+        var monster = obj.GetComponent<Monster>();
+        monster.Sleep();
+        activeObjs.Enqueue(obj);
+        OnCellDead(obj);
+    }
+
+    #endregion
+
+    public void SetInstance(Vector3 mPos, MonsterActState mState, MonsterColor mColor, float mSpeed)
+    {
+        GameObject obj = BirthCell(mPos);        
+        Monster monster = obj.GetComponent<Monster>();
+        monster.MonsterState = mState;
+        monster.OnSetState();
+        monster.ColorType = mColor;
+        monster.SetInitSpeed(mSpeed);
+    }
+}
